@@ -149,14 +149,14 @@ class VoiceService {
       List<int> curr = [i + 1];
       for (int j = 0; j < b.length; j++) {
         final cost = a[i] == b[j] ? 0 : 1;
-        curr.add([curr[j] + 1, prev[j + 1] + 1, prev[j] + cost].reduce(min));
+        curr.add(_min3(curr[j] + 1, prev[j + 1] + 1, prev[j] + cost));
       }
       prev = curr;
     }
     return prev.last;
   }
 
-  int min(List<int> vals) => vals.reduce((a, b) => a < b ? a : b);
+  int _min3(int a, int b, int c) { int m = a < b ? a : b; return m < c ? m : c; }
 
   String _responseFor(String cmd) {
     switch (cmd) {
