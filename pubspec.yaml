@@ -1,0 +1,25 @@
+name: neva
+description: Neva - Sesli Muzik Kontrolu
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  speech_to_text: ^6.6.0
+  flutter_tts: ^3.8.5
+  just_audio: ^0.9.36
+  permission_handler: ^11.1.0
+  shared_preferences: ^2.2.2
+  file_picker: ^6.1.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
