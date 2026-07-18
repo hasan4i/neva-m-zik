@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:math';
 import 'package:just_audio/just_audio.dart';
 
@@ -31,6 +32,76 @@ class MusicService {
     if (tracks.length == newTracks.length && tracks.isNotEmpty) {
       _load(0);
     }
+  }
+
+  void removeAt(int index) {
+    if (index < 0 || index >= tracks.length) return;
+    final wasCurrentOrBefore = index <= currentIndex;
+    tracks.removeAt(index);
+    if (tracks.isEmpty) {
+      player.stop();
+      currentIndex = 0;
+      return;
+    }
+    if (wasCurrentOrBefore && currentIndex > 0) {
+      currentIndex--;
+    }
+    if (currentIndex >= tracks.length) {
+      currentIndex = tracks.length - 1;
+    }
+  }
+
+  void clearAll() {
+    player.stop();
+    tracks.clear();
+    currentIndex = 0;
+  }
+
+  Future<List<Track>> scanDeviceMusic({List<String>? customFolders}) async {
+    final found = <Track>[];
+    final seenPaths = <String>{};
+    final foldersToScan = customFolders ?? [
+      '/storage/emulated/0/Music',
+      '/storage/emulated/0/Download/Music',
+    ];
+    const validExt = ['.mp3', '.m4a', '.wav', '.ogg', '.flac', '.aac'];
+    const minSizeBytes = 200 * 1024;
+    const excludedKeywords = ['whatsapp', 'notification', 'ringtone', 'voip', 'record'];
+
+    for (final folderPath in foldersToScan) {
+      try {
+        final dir = Directory(folderPath);
+        if (!await dir.exists()) continue;
+        await for (final entity in dir.list(recursive: true, followLinks: false)) {
+          if (entity is! File) continue;
+          final path = entity.path;
+          final lower = path.toLowerCase();
+
+          final hasValidExt = validExt.any((ext) => lower.endsWith(ext));
+          if (!hasValidExt) continue;
+
+          final isExcluded = excludedKeywords.any((kw) => lower.contains(kw));
+          if (isExcluded) continue;
+
+          if (seenPaths.contains(path)) continue;
+
+          try {
+            final size = await entity.length();
+            if (size < minSizeBytes) continue;
+          } catch (_) {
+            continue;
+          }
+
+          seenPaths.add(path);
+          final fileName = path.split('/').last;
+          final name = fileName.replaceAll(RegExp(r'\.[^.]+$'), '');
+          found.add(Track(path: path, name: name));
+        }
+      } catch (_) {
+        continue;
+      }
+    }
+    return found;
   }
 
   Future<void> _load(int index) async {
