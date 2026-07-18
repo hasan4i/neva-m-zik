@@ -44,6 +44,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _requestPermissions() async {
     await Permission.microphone.request();
     await Permission.notification.request();
+    await Permission.audio.request();
+    await Permission.storage.request();
   }
 
   String _textForMode(NevaMode mode) {
@@ -77,6 +79,72 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  Future<void> _pickFolder() async {
+    final dirPath = await FilePicker.platform.getDirectoryPath();
+    if (dirPath == null) return;
+
+    setState(() => _statusText = 'Klasor taraniyor...');
+
+    final found = await _music.scanDeviceMusic(customFolders: [dirPath]);
+
+    if (found.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Bu klasorde muzik dosyasi bulunamadi.')),
+        );
+      }
+      setState(() => _statusText = _textForMode(_voice.mode));
+      return;
+    }
+
+    setState(() {
+      _music.addTracks(found);
+      _statusText = _textForMode(_voice.mode);
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${found.length} sarki eklendi.')),
+      );
+    }
+  }
+
+  void _removeTrack(int index) {
+    setState(() {
+      _music.removeAt(index);
+    });
+  }
+
+  void _clearAllTracks() {
+    setState(() {
+      _music.clearAll();
+    });
+  }
+
+  Future<void> _confirmClearAll() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A2744),
+        title: const Text('Emin misiniz?', style: TextStyle(color: Colors.white)),
+        content: const Text('Tum sarkilar listeden kaldirilacak.', style: TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Vazgec'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Temizle', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      _clearAllTracks();
+    }
+  }
+
   Future<void> _toggleVoice() async {
     if (_voiceOn) {
       _voice.stop();
@@ -93,6 +161,14 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
         return;
+      }
+      if (mounted && _voice.localeStatus.contains('bulunamadi')) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Uyari: ${_voice.localeStatus}. Telefon ayarlarindan Turkce ses tanima dil paketini indirmeniz gerekebilir.'),
+            duration: const Duration(seconds: 6),
+          ),
+        );
       }
       setState(() => _voiceOn = true);
       _voice.start(onCommand: _handleCommand);
@@ -180,32 +256,69 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 20),
 
-              // Yükleme
-              InkWell(
-                onTap: _pickFiles,
-                borderRadius: BorderRadius.circular(14),
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.white24, width: 1.5),
-                    borderRadius: BorderRadius.circular(14),
+              Row(
+                children: [
+                  Expanded(
+                    child: InkWell(
+                      onTap: _pickFiles,
+                      borderRadius: BorderRadius.circular(14),
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.white24, width: 1.5),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.add, color: Colors.white70),
+                            SizedBox(height: 4),
+                            Text('Muzik ekle', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: const [
-                      Icon(Icons.add, color: Colors.white70),
-                      SizedBox(width: 8),
-                      Text('Muzik ekle', style: TextStyle(color: Colors.white70)),
-                    ],
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: InkWell(
+                      onTap: _pickFolder,
+                      borderRadius: BorderRadius.circular(14),
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.white24, width: 1.5),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.folder_open, color: Colors.white70),
+                            SizedBox(height: 4),
+                            Text('Klasor sec', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ),
               const SizedBox(height: 16),
 
-              // Playlist
-              if (hasTrack)
+              if (hasTrack) ...[
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('${_music.tracks.length} sarki', style: const TextStyle(color: Colors.white38, fontSize: 12)),
+                    InkWell(
+                      onTap: _confirmClearAll,
+                      child: const Text('Tumunu temizle', style: TextStyle(color: Colors.redAccent, fontSize: 12)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
                 Container(
-                  height: 130,
+                  height: 160,
                   decoration: BoxDecoration(
                     color: const Color(0xFF1A2744),
                     borderRadius: BorderRadius.circular(14),
@@ -226,21 +339,24 @@ class _HomeScreenState extends State<HomeScreen> {
                           overflow: TextOverflow.ellipsis,
                         ),
                         onTap: () => _music.playAt(i),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.close, color: Colors.white24, size: 18),
+                          onPressed: () => _removeTrack(i),
+                        ),
                       );
                     },
                   ),
                 ),
+              ],
 
               const SizedBox(height: 20),
 
-              // Şu an çalan
               Text(currentName,
                   style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis),
               const SizedBox(height: 16),
 
-              // Kontroller
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -267,7 +383,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
               const Spacer(),
 
-              // Ses durumu
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
@@ -283,7 +398,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
               const SizedBox(height: 16),
 
-              // Mikrofon aç/kapa
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
